@@ -1,4 +1,4 @@
-module grafana-dashboard-backup
+module github.com/alantang888/grafana-dashboard-backup
 
 go 1.17
 
