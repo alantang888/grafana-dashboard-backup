@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	gitHttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -56,7 +58,15 @@ func main() {
 	if err != nil {
 		log.Fatalln("Can't checkout Git repo: ", err.Error())
 	}
-	fmt.Println("temp dir: ", tempDir)
+	gitAuthor := os.Getenv("GIT_AUTHOR")
+	gitAuthorEmail := os.Getenv("GIT_AUTHOR_EMAIL")
+	if gitAuthor == "" {
+		gitAuthor = "NO BODY"
+	}
+	if gitAuthorEmail == "" {
+		gitAuthorEmail = "no-body@example.com"
+	}
+
 	workingTree, _ := gitRepo.Worktree()
 
 	directoryPrefix := os.Getenv("DIR_PREFIX")
@@ -73,7 +83,16 @@ func main() {
 
 	gitStatus, _ := workingTree.Status()
 	if len(gitStatus) > 0 {
-		workingTree.Commit(fmt.Sprintf("%d dashboard(s) content updated.", len(gitStatus)), &git.CommitOptions{})
+		_, err = workingTree.Commit(fmt.Sprintf("%d dashboard(s) content updated.", len(gitStatus)), &git.CommitOptions{
+			Author: &object.Signature{
+				Name:  gitAuthor,
+				Email: gitAuthorEmail,
+				When:  time.Now(),
+			},
+		})
+		if err != nil {
+			log.Fatalln("Commit failed: ", err.Error())
+		}
 		err = gitRepo.Push(&git.PushOptions{Auth: &gitAuth})
 		if err != nil {
 			log.Fatalln("Push to git remote failed: ", err.Error())
