@@ -142,7 +142,7 @@ func getGrafanaDashboard() []DashboardInfo {
 		if !dashboard.Meta.Provisioned {
 			dashboardInfo.Uid = searchResult.Uid
 			dashboardInfo.Title = searchResult.Title
-			dashboardInfo.DashboardJson, _ = json.Marshal(dashboard.Dashboard)
+			dashboardInfo.DashboardJson, _ = json.MarshalIndent(dashboard.Dashboard, "", "  ")
 			results = append(results, dashboardInfo)
 		}
 	}
