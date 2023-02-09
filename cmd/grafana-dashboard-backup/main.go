@@ -17,6 +17,7 @@ import (
 const (
 	GRAFANA_SEARCH_PATH        = "api/search/"
 	GRAFANA_GET_DASHBOARD_PATH = "api/dashboards/uid"
+	GRAFANA_ALERT_RULE_PATH    = "api/ruler/grafana/api/v1/rules"
 )
 
 type SearchResult struct {
@@ -41,6 +42,7 @@ type DashboardInfo struct {
 
 func main() {
 	grafanaDashboards := getGrafanaDashboard()
+	alertRuleNamespaces := getGrafanaAlertRule()
 
 	tempDir, err := os.MkdirTemp("", "*")
 	if err != nil {
@@ -81,9 +83,25 @@ func main() {
 		workingTree.Add(targetFile)
 	}
 
+	alertRuleDir := os.Getenv("ALERT_RULE_DIR_PREFIX")
+	for arNamespace, arGroups := range alertRuleNamespaces {
+		for _, arGroup := range arGroups {
+			targetFile := filepath.Join(alertRuleDir, arNamespace, fmt.Sprintf("%s.json", arGroup.Name))
+			targetFullPath := filepath.Join(tempDir, targetFile)
+
+			os.MkdirAll(filepath.Dir(targetFullPath), 0777)
+			arGroupJson, err := json.MarshalIndent(arGroup, "", "  ")
+			if err != nil {
+				log.Panic(err)
+			}
+			ioutil.WriteFile(targetFullPath, arGroupJson, 0644)
+			workingTree.Add(targetFile)
+		}
+	}
+
 	gitStatus, _ := workingTree.Status()
 	if len(gitStatus) > 0 {
-		_, err = workingTree.Commit(fmt.Sprintf("%d dashboard(s) content updated.", len(gitStatus)), &git.CommitOptions{
+		_, err = workingTree.Commit(fmt.Sprintf("%d file(s) content updated.", len(gitStatus)), &git.CommitOptions{
 			Author: &object.Signature{
 				Name:  gitAuthor,
 				Email: gitAuthorEmail,
@@ -147,4 +165,30 @@ func getGrafanaDashboard() []DashboardInfo {
 		}
 	}
 	return results
+}
+
+func getGrafanaAlertRule() NamespaceConfigResponse {
+	client := &http.Client{}
+	grafanaUrl := os.Getenv("GRAFANA_URL")
+	grafanaTokenValue := os.Getenv("GRAFANA_TOKEN")
+	grafanaToken := fmt.Sprintf("Bearer %s", grafanaTokenValue)
+
+	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/%s", grafanaUrl, GRAFANA_ALERT_RULE_PATH), nil)
+	req.Header.Set("Authorization", grafanaToken)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	res, err := client.Do(req)
+	if err != nil {
+		log.Panic("Can't fetch grafana alert rules. Error: ", err.Error())
+	}
+
+	defer res.Body.Close()
+	resp_body, _ := ioutil.ReadAll(res.Body)
+
+	var alertRuleNamespaces NamespaceConfigResponse
+	err = json.Unmarshal(resp_body, &alertRuleNamespaces)
+	if err != nil {
+		log.Panic("Can't parse grafana alert rules json. Error: ", err.Error())
+	}
+	return alertRuleNamespaces
 }
