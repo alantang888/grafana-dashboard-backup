@@ -6,6 +6,8 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	gitHttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/push"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -41,6 +43,19 @@ type DashboardInfo struct {
 }
 
 func main() {
+	dashboardExportMetric := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "grafana_export_dashboard_export_total",
+		Help: "Number of grafana dashboard exported",
+	})
+	alertruleExportMetric := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "grafana_export_alert_rule_export_total",
+		Help: "Number of grafana alert rule exported",
+	})
+	gitWorktreeStatusMetric := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "grafana_export_git_status_total",
+		Help: "Nuber of item changed on git",
+	})
+
 	grafanaDashboards := getGrafanaDashboard()
 	alertRuleNamespaces := getGrafanaAlertRule()
 
@@ -81,6 +96,8 @@ func main() {
 		os.MkdirAll(filepath.Dir(targetFullPath), 0777)
 		ioutil.WriteFile(targetFullPath, dashboard.DashboardJson, 0644)
 		workingTree.Add(targetFile)
+
+		dashboardExportMetric.Inc()
 	}
 
 	alertRuleDir := os.Getenv("ALERT_RULE_DIR_PREFIX")
@@ -96,6 +113,8 @@ func main() {
 			}
 			ioutil.WriteFile(targetFullPath, arGroupJson, 0644)
 			workingTree.Add(targetFile)
+
+			alertruleExportMetric.Inc()
 		}
 	}
 
@@ -118,6 +137,16 @@ func main() {
 		log.Println("Change pushed to repo.")
 	} else {
 		log.Println("Nothing changed.")
+	}
+	gitWorktreeStatusMetric.Set(float64(len(gitStatus)))
+
+	pushUrl := os.Getenv("PUSH_GATEWAY_URL")
+	pushJobName := os.Getenv("PUSH_JOB_NAME")
+	if pushUrl != "" {
+		if pushJobName == "" {
+			pushJobName = "grafana_export"
+		}
+		push.New(pushUrl, pushJobName).Collector(dashboardExportMetric).Collector(alertruleExportMetric).Collector(gitWorktreeStatusMetric).Push()
 	}
 }
 
