@@ -16,3 +16,5 @@ Environment variables:
 - `ALERT_RULE_DIR_PREFIX`: Alert rule directory prefix on git repo
 - `GRAFANA_URL`: Grafana URL
 - `GRAFANA_TOKEN`: Grafana API token. It just need viewer permission
+- `PUSH_GATEWAY_URL`: Prometheus pushgate URL
+- `PUSH_JOB_NAME`: Prometheus job name. (Default will set to `grafana_export`)
